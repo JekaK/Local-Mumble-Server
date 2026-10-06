@@ -90,7 +90,7 @@
                 android:maxLength="3"
                 android:text="30" />
 
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Максимальний бітрейт на користувача, біт/с" android:textColor="@color/text_secondary" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Ліміт голосового трафіку на користувача, біт/с" android:textColor="@color/text_secondary" />
             <EditText
                 android:id="@+id/bitrateInput"
                 android:layout_width="match_parent"

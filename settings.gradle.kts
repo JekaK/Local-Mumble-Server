@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "LocalMumbleServer"
 include(":app")
+include(":server-core")

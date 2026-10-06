@@ -1,369 +1,216 @@
 # Local Mumble Server
 
-**Turn an Android phone into an offline voice server for your classroom or local group.**
+[Українська](README.uk.md) · **English**
 
-**English** · [Українська](README.uk.md)
+An offline voice server hosted directly on an Android phone. Turn on the phone's Wi-Fi hotspot, start the server, and let nearby devices join through a Mumble-compatible client. The host can speak through a separate client on the same phone.
 
-[Download Android APK](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-1.0.0-beta1.apk) · [Installation](#step-by-step-installation) · [Troubleshooting](#troubleshooting) · [Build from source](#build-from-source)
+**Version 2 replaces the former native uMurmur engine with a Kotlin implementation.** The Android application and server logic are Kotlin. There is no Murmur/uMurmur executable, JNI library, NDK, CMake, Termux, root requirement, or runtime server download.
 
-| Android | Version | Voice | Network |
+[Download APK](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta1.apk) · [Installation](#step-by-step-installation) · [Troubleshooting](#troubleshooting) · [Validation report](VALIDATION.md)
+
+| Android | Version | Runtime | Voice transport |
 | --- | --- | --- | --- |
-| 8.0+ | 1.0.0-beta1 | Mumble-compatible, Opus | Local IPv4, TCP + UDP |
+| 8.0+ | 2.0.0-beta1 | Kotlin + Android platform APIs | TLS 1.2+ and encrypted UDP |
 
-One Android phone hosts the server and creates a Wi-Fi hotspot. Other devices
-join that network and connect using a Mumble-compatible voice client. The host
-can talk and listen too, using a separate client on the same phone.
+> **Beta:** automated tests exercise the Kotlin server's wire protocol and voice-packet transport. They do not establish real microphone-to-speaker latency, classroom capacity, or compatibility with every iPhone client. Physical Android/iPhone interoperability still needs a device test. See [VALIDATION.md](VALIDATION.md) for the actual checks and limitations.
 
-Internet, a computer, a separate router, root and Termux are not required during
-use. Download the server and clients beforehand. The server app's current
-interface is Ukrainian; this guide explains its controls in English.
+## How it works
 
-> **Beta status:** server startup on a physical Android phone has been reported
-> by the project owner. Automated native protocol tests pass. End-to-end audio,
-> a full classroom and iPhone interoperability are not yet validated. An iPhone
-> client remaining at “Connecting” is an open troubleshooting case.
+1. Android's system hotspot creates the local network.
+2. The foreground service runs the Kotlin server inside the app process.
+3. The host's voice client connects to `127.0.0.1:64738`.
+4. Other devices connect to the Android phone's hotspot address.
+5. The server authenticates participants and relays encoded audio between them.
 
-## Why this project exists
+Mumble is the **client protocol** here. Murmur and uMurmur are server implementations; neither is part of this version. This is an independent, intentionally small single-channel implementation, not the official Mumble server.
 
-Classroom voice communication should remain available when internet access is
-missing or overloaded. This project keeps the voice server on the teacher's
-phone and routes voice between devices on the same local network.
-
-It is suitable for testing local voice sessions in classrooms, school shelters,
-workshops and small groups. Local transport removes the dependency on an
-external voice server; actual delay still depends on the phones, Wi-Fi, audio
-client and headsets. There is no promised latency figure or guaranteed group
-size.
-
-## What is included
-
-- A native **uMurmur** server bundled in the APK.
-- Start/stop controls, configurable port, password, user limit and bandwidth.
-- A default voice channel named **Клас** (“Class”).
-- A foreground service with a persistent notification and stop action.
-- Local IP display, copyable addresses and a UDP participant counter.
-- A copyable server log containing the last 80 lines.
-- A self-signed TLS certificate generated separately on each installation.
-- Source code, dependency licenses and protocol tests.
-
-The server app does not capture your microphone or record audio. A **separate
-voice client is required on every speaking/listening device**, including the
-host. This project uses uMurmur, not MumbleWay, and is not an official Mumble
-release.
+The app **does not contain a microphone client**. Install a voice client separately on the host and every participant device.
 
 ## Requirements
 
 | Item | Requirement |
 | --- | --- |
-| Host phone | Android 8.0+; ARM64, ARMv7 or x86-64 |
-| Local network | Android Wi-Fi hotspot, or an existing LAN |
-| Hotspot behavior | Connected devices must be able to reach the host phone |
-| Voice clients | Mumble-compatible clients with Opus support |
-| Android client | [Mumla](https://mumla-app.gitlab.io/), available on [F-Droid](https://f-droid.org/packages/se.lublin.mumla/) |
-| iPhone | Requires a compatible iOS client; currently unverified with this build |
-| Internet | Needed beforehand for downloads; not needed for local voice sessions |
+| Host | Android 8.0 or newer with a working Wi-Fi hotspot |
+| Architecture | No native ABI restriction; ARM and x86 devices use the same APK |
+| Participants | Mumble-compatible clients using TLS 1.2+ |
+| Codecs | Opus on all clients, or a common CELT bitstream version on all clients |
+| Network | Local IPv4; TCP and UDP use the same server port |
+| Internet | Needed to download apps/build dependencies; not needed for voice sessions |
+| RAM/CPU | Minimum hardware and classroom capacity have not been measured |
 
-No measured minimum RAM or CPU requirement has been established. Start with
-two devices and increase the load on the actual host phone.
+Opus is preferred when every connected client supports it. Legacy CELT-only clients are admitted when the whole group has a shared CELT codec. A client with no common codec receives an explicit rejection. There is **no audio transcoding**.
 
-**The server user limit does not override the hotspot device limit.** A setting
-of 30 users cannot make a hotspot that allows 10 connected devices accept 30.
-The host's own voice client also occupies a server slot.
-
-## Choose the correct server address
-
-| Where the voice client runs | Address to enter |
-| --- | --- |
-| On the Android phone hosting the server | `127.0.0.1` |
-| On another device connected to that phone's hotspot | The host's hotspot IPv4 address |
-| On another device in an existing LAN | The host Android phone's IPv4 address on that LAN |
-
-Use port **64738**, unless you changed it in the server app. Enter the address
-and port in their separate fields; do not add `http://` or `https://`.
-
-`127.0.0.1` always means **this device**. Entering it on a student's phone
-connects to the student's own phone, not the teacher's server.
-
-For the host's hotspot, its IP can usually be found as **Gateway / Router** in
-a connected device's Wi-Fi details. On an existing router-based LAN, that field
-is the router's IP: use the server app's displayed host IP instead. Hotspot
-addresses vary by device and may change after restarting the hotspot.
+The server speaks the widely implemented legacy Mumble UDP format. It advertises protocol compatibility with Mumble 1.2.4, while the application version is 2.0.0-beta1.
 
 ## Step-by-step installation
 
-### 1. Prepare the devices before going offline
+### 1. Download the applications before going offline
 
-1. Download [LocalMumbleServer-1.0.0-beta1.apk](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-1.0.0-beta1.apk)
-   on the **Android host phone**.
-2. Install [Mumla from F-Droid](https://f-droid.org/packages/se.lublin.mumla/)
-   on Android phones that will speak or listen. This includes the host phone.
-3. If iPhones will participate, validate their client with two devices before
-   planning a session. See [the iPhone section](#iphone-connection-notes).
-4. Have headphones available for devices in the same room to reduce acoustic
-   feedback. Start with one host and one other device.
+1. Download [LocalMumbleServer-2.0.0-beta1.apk](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta1.apk).
+2. On Android participant devices, install [Mumla](https://mumla-app.gitlab.io/) through [F-Droid](https://f-droid.org/packages/se.lublin.mumla/) or its official distribution.
+3. On iPhone, install a Mumble-compatible client and test it with this server before the lesson.
+4. Install a client on the host phone too if the host needs to speak.
+5. Keep the APK locally; the server runs without an internet connection.
 
-Students need the **client**, not the server APK.
+Verify the APK against [downloads/SHA256SUMS](downloads/SHA256SUMS). This repository publishes a **debug-signed beta**, not a Play Store release.
 
-### 2. Install the server APK on Android
+**Upgrading from 1.0.0-beta1:** this published APK has a different debug signing
+certificate. Uninstall the old server app before installing version 2. This clears
+its settings and TLS identity; your separate voice-client app is unaffected.
 
-1. Open the downloaded APK using the browser's downloads or a file manager.
-2. If Android blocks it, allow **Install unknown apps** for that browser/file
-   manager and open the APK again. Menu names vary by manufacturer.
-3. Install and launch **Локальний Mumble сервер**.
-4. Allow notifications when requested, so the running-server notification and
-   stop action are visible.
-5. Remove the browser/file manager's install permission after installation if
-   it is no longer needed.
+### 2. Install the APK on the Android host
 
-The supplied APK is a **debug-signed beta**, not a production-signed release.
-You can verify its SHA-256 using [downloads/SHA256SUMS](downloads/SHA256SUMS).
+1. Open the downloaded APK.
+2. If prompted, allow the browser/file manager to install unknown apps.
+3. Install and open **Локальний Mumble сервер**.
+4. Allow notifications when prompted. The notification shows that the foreground service is active and provides a stop action.
+5. If the phone's battery settings offer an unrestricted mode for the app, use it during a session.
 
-### 3. Create the local Wi-Fi network
+The app requests network, foreground-service, wake-lock and notification permissions. It does not request microphone access.
 
-1. On the host, open Android's **Wi-Fi hotspot / Tethering** settings. The
-   server's **Відкрити налаштування точки доступу** button opens system settings.
-2. Give the hotspot a recognizable name, for example `Class-Voice`.
-3. Set a Wi-Fi password and enable the hotspot.
-4. Disable automatic hotspot shutdown if that setting is available.
-5. Join the hotspot from the other device. If it reports **No internet**, keep
-   the Wi-Fi connection: the session uses local traffic.
-6. Mobile data is not needed for voice. Turn it off for an offline check if the
-   phone permits its hotspot to remain active without mobile data.
+### 3. Enable the phone's Wi-Fi hotspot
 
-The app opens hotspot settings; it does not create or configure the hotspot
-automatically. An existing LAN is also usable if devices can reach the host.
+1. Tap **Відкрити налаштування точки доступу**, or open Android's system hotspot settings.
+2. Choose a network name and a WPA2/WPA3 password.
+3. Turn on the hotspot and disable automatic hotspot shutdown if available.
+4. Connect participant devices to this Wi-Fi network.
+5. Keep the connection when Android/iOS warns that this network has no internet.
 
-### 4. Configure and start the server
+Hotspot support and its device limit depend on the phone. Raising the app's user limit does not increase the operating system's hotspot limit.
 
-Use these initial settings:
+### 4. Start the Kotlin server
 
-| App field | Initial value | Meaning |
-| --- | --- | --- |
-| Порт | `64738` | Same listening port for TCP and UDP |
-| Максимум учасників | `30` | Server slots, including the host's client; not a capacity guarantee |
-| Максимальний бітрейт… | `48000` | Per-user server bandwidth ceiling in bits/s; packet overhead also matters |
-| Пароль сервера | Your chosen password | Separate from the Wi-Fi password |
+1. Leave the port at **64738**, unless another app already uses it.
+2. Set the participant limit; default: **30**, supported setting: 2–100.
+3. Leave the voice-traffic limit at **48000 bits/s** initially.
+4. Set an optional server password, independent of the hotspot password.
+5. Tap **Запустити сервер**.
+6. Wait for **Сервер працює**.
 
-1. Enter a server password and share it with the participants.
-2. Tap **Запустити сервер** (“Start server”).
-3. Wait for **Сервер працює** (“Server running”). First startup generates a
-   certificate and may take longer than later starts.
-4. Read the **Для учнів** (“For students”) address. If several are displayed,
-   use the address belonging to the network the students actually joined.
-5. If Android does not expose the hotspot IP, use the connected device's
-   **Gateway / Router** value as explained above.
+The first start generates a self-signed TLS identity in private app storage. The status becomes running only after both TCP and UDP sockets are bound.
 
-“Server running” confirms that the native server opened its TCP and UDP
-listeners. It does not prove another phone can reach those listeners.
+The traffic setting is advertised to clients and enforced by a per-user token bucket. It includes an allowance for packet overhead; it is **not a guaranteed audio-codec bitrate**.
 
-### 5. Connect the host's own voice client
+### 5. Connect the host's voice client
 
-Open Mumla on the Android host and add a server:
+Create a connection in Mumla:
 
-| Client field | Value |
+| Field | Value |
 | --- | --- |
-| Label | `Class Voice` — any descriptive name |
-| Address / Host | `127.0.0.1` |
-| Port | `64738`, or your configured port |
-| Username | `Teacher`, or another unique name |
-| Password | The server password from step 4 |
+| Address | `127.0.0.1` |
+| Port | `64738`, or the configured port |
+| Username | A unique name, such as `Teacher` |
+| Password | The optional server password |
 
-Connect and enter **Клас**. If a certificate warning appears, accept the
-certificate **only after checking you are connecting to your own server**.
-The self-signed certificate is generated on the host and reused across server
-restarts. A reinstall or deletion of app data can change it.
+Accept the local server's self-signed certificate if the client prompts. The channel is **Клас**. Use headphones and push-to-talk to reduce acoustic feedback. The host client occupies one participant slot.
 
-The server continues in its foreground service while Mumla is open. The server
-itself does not request microphone permission; the voice client does.
+### 6. Connect participant devices
 
-### 6. Connect the students or other participants
+1. Join the host phone's hotspot.
+2. Read the address under **Для учнів** in the server app.
+3. Create a client connection using that address, the configured port, a unique username, and the server password.
+4. Accept the expected local certificate.
+5. Confirm that the client enters **Клас** and displays other participants.
 
-1. Join `Class-Voice` using its **Wi-Fi password**.
-2. Keep that Wi-Fi connection even if there is no internet.
-3. In the voice client, add a server using the **host's hotspot IP** and port
-   `64738`. Do not use `127.0.0.1` or the student's own IP.
-4. Enter a unique username such as `Student01` and the **server password**.
-5. Check the server certificate as above and connect to **Клас**.
-6. Allow microphone access in the client if that participant needs to speak.
-7. Test speech in both directions with headphones before adding more devices.
+| Connection | Address |
+| --- | --- |
+| Client on the host phone | `127.0.0.1` |
+| Client on the host's hotspot | The Android host's hotspot IP |
+| Client on an existing router's Wi-Fi | The Android host's LAN IP, **not** the router's gateway |
 
-### 7. Validate the setup before a full session
+If the hotspot IP is not listed, inspect Wi-Fi details on a participant device: its **Gateway/Router** address usually points to the hotspot phone. This shortcut applies to a phone hotspot, not to an unrelated router.
 
-- Start with two devices; confirm both can hear and transmit.
-- Move the host close enough for a stable Wi-Fi signal.
-- Test the host with Mumla in the foreground and the server app in the
-  background. Also test with the host's screen off.
-- If your phone offers **Unrestricted battery** mode, apply it to the server
-  and voice client. Manufacturer power-saving policies still need testing.
-- Add a few participants at a time and observe dropouts, delay and heating.
-- Keep the host charged for the session; stop the server and hotspot afterwards.
+Do not use `127.0.0.1` on participant phones: it refers to that participant phone itself. The host IP may change after restarting the hotspot.
 
-For noisy rooms, use push-to-talk when the chosen client supports it. Acoustic
-feedback from nearby speakers is different from network delay.
+### 7. Verify the session before a lesson
 
-## iPhone connection notes
+1. Start with the host and one participant.
+2. Confirm both directions of speech, not just the connected status.
+3. Test with the screen off and the host client open.
+4. Add participants gradually.
+5. Repeat on an iPhone if iPhone participation is required.
+6. Adjust the traffic limit and client audio settings only after the basic test works.
 
-The server APK is Android-only. An iPhone can participate **only through a
-compatible Mumble client**; working interoperability with this beta is not yet
-confirmed.
+The foreground service and wake lock help keep the app running. Manufacturer power management may still interrupt it. The configured 100-user maximum is a setting, not a tested capacity claim.
 
-The [Mumble app by Mikkel Krautz](https://apps.apple.com/us/app/mumble/id443472808)
-lists version 1.3.1 from September 13, 2017. Its
-[upstream repository](https://github.com/mumble-voip/mumble-iphoneos) explicitly
-states that the app is unmaintained. Do not assume a current App Store listing
-means compatibility with modern iOS or this server.
+## iPhone connection checks
 
-If the iPhone remains at **Connecting**:
+The earlier iPhone report was a client staying at “Connecting”; its cause was not established. A Kotlin rewrite alone does not prove that issue is fixed.
 
-1. Confirm it joined the host's hotspot, and use that hotspot's **Router** IP.
-2. Check the port and server password.
-3. Open **Settings → Privacy & Security → Local Network** and allow access for
-   the client if it appears there. See [Apple's instructions](https://support.apple.com/en-us/102229).
-4. Check whether the client is waiting for a server certificate confirmation.
-5. After another connection attempt, inspect **Журнал сервера** on Android.
-   Use the actual log error to distinguish a TLS failure, rejected login and
-   codec incompatibility. “Connecting” alone cannot identify the cause.
+- Allow the client's local-network permission in iOS settings; [Apple's instructions](https://support.apple.com/en-us/102229).
+- Confirm the iPhone is connected to the host hotspot and uses the correct host IP/port.
+- Accept the new server certificate. Version 2 uses a separate identity, so its fingerprint changes from version 1.
+- Inspect **Журнал сервера**: it distinguishes a TCP/TLS connection, a successful login, and a rejection reason.
+- A “No common audio codec” rejection requires clients with compatible codecs; the server cannot transcode between Opus and CELT.
+- The [legacy Mumble iPhone app](https://apps.apple.com/us/app/mumble/id443472808) has an [unmaintained upstream](https://github.com/mumble-voip/mumble-iphoneos). Verify that specific app/device combination in practice.
 
-The native server requires TLS 1.2 or newer and clients that advertise Opus
-support. Those requirements are compatibility checks, not a diagnosis of the
-reported iPhone issue. The cause remains unresolved without the connection log.
+No real iPhone compatibility or latency claim is made without a device test.
 
 ## Troubleshooting
 
-| Symptom | Checks / action |
+| Symptom | Check or correction |
 | --- | --- |
-| APK cannot be installed | Android must be 8.0+ with a supported ABI; allow APK installation for the app opening the file and check the file downloaded completely |
-| Server does not start | Open **Журнал сервера**; inspect the actual error; check port `1024–65535`, user limit `2–100` and bandwidth `8000–128000` |
-| Host's client works, another phone stays at Connecting | Check its Wi-Fi, host IP and port; verify access to a network without internet, client local-network permissions and hotspot restrictions |
-| `SSL handshake failed` | A TLS handshake failed; keep the numeric code and full log, and check client compatibility / certificate handling |
-| `Your client does not support Opus` | The client did not advertise Opus; use a client/build that supports it |
-| `Wrong server password` | Enter the server password, not the Wi-Fi password; reconnect after changing it |
-| `Username already in use` | Give each client a unique username |
-| IP is not shown | For the host's hotspot, use Gateway/Router on a connected device; on an existing LAN, use the host's LAN address |
-| Connected, but no voice | Check the **Клас** channel, mute/deafen, microphone permission, push-to-talk and selected audio output |
-| Audio cuts out or has long delay | Test two devices first; improve signal, compare client audio settings, reduce simultaneous transmitters and check power saving |
-| Echo or whistling | Use headphones and push-to-talk; reduce nearby speaker volume |
-| Stops after switching apps / locking the screen | Check battery restrictions for both server and client, hotspot auto-off and the persistent notification |
-| More devices cannot join Wi-Fi | Check the phone's hotspot client limit; changing server slots cannot raise it |
-| Participant counter shows a UDP error | The app's loopback UDP status query failed; inspect the server log; this is not an external-client connectivity test |
+| Server does not start | Read the log; check port conflicts and configuration ranges |
+| Client stays at Connecting | Host IP, port, hotspot membership, local-network permission, certificate and server log |
+| TLS failure | Client must support TLS 1.2+; inspect its certificate prompt |
+| Wrong server password | Enter the app's server password, not the hotspot password |
+| Username already in use | Give each device a different username; comparison is case-insensitive |
+| Server full | Disconnect unused clients or increase the participant setting |
+| No common audio codec | Use Opus-compatible clients throughout the group, or clients sharing the same CELT version |
+| Connected but no sound | Check push-to-talk, client microphone permission, mute/deafen and a two-device speech test |
+| Delayed/interrupted voice | Check signal strength, hotspot capacity, power management and client audio settings |
+| Stops with screen off | Check battery restrictions and automatic hotspot shutdown |
+| Certificate changed | Expected once when switching from the old native version to this Kotlin version |
+| APK update rejected | The installed APK and new APK may use different debug signing keys |
 
-To collect a useful report, open **Журнал сервера → Копіювати** after reproducing
-the problem. Include host model/Android version, client name/version, network
-type, the exact error and whether `127.0.0.1` works on the host. Remove passwords
-and personal names from public reports. An empty log is not proof that no TCP
-connection reached the server: some early connection events are not logged at
-the normal log level.
+TCP tunneling is available when UDP is unavailable. A confirmed UDP endpoint is preferred; receiving a tunneled voice packet switches that client back to TLS. An inactive UDP endpoint expires after 15 seconds.
 
-## Daily operation and data
+## Scope, privacy and limits
 
-- Stop the server from the app or its persistent notification.
-- Stop, edit settings, then start again to change configuration.
-- Device reboot does not automatically restart the server.
-- The local log retains at most 80 lines; it is not an audio recording.
-- The password, configuration, certificate and private key are kept in app
-  private storage. App backup is disabled.
-- The app contains no analytics or external-service requests. Android's
-  `INTERNET` permission is needed for local TCP/UDP sockets too.
-- Android builds accept private IPv4, loopback and link-local peers. This is
-  not an authentication boundary: use trusted networks and a server password.
-- No public hosting or router port forwarding is part of this setup.
+Implemented: one voice channel, unique guest usernames, optional server password, participant count, codec negotiation, TLS control and tunneled voice, OCB2-AES128 UDP voice, ping, nonce resynchronization, self-mute/self-deafen, traffic bounds and clean shutdown.
 
-## Build from source
+Not implemented: registered accounts, ACL administration, channel creation, kick/ban controls, text chat, whisper targets, recording, web access, audio transcoding, or a built-in microphone client.
 
-Building needs a computer and internet for SDK/Gradle downloads. Running the
-installed APK does not.
+The server forwards encoded voice and does not decode or record it. Configuration, server password and TLS identity stay in the Android app sandbox; Android backup is disabled. Logs contain connection/user information, not audio or server passwords. The TLS private key is stored in private app storage.
 
-| Tool | Version used by this project |
-| --- | --- |
-| JDK | 17, full JDK including `javac` |
-| Gradle | 8.11.1, supplied through the wrapper |
-| Android Gradle Plugin | 8.9.1 |
-| Android SDK Platform | 35 |
-| Android SDK Build-Tools | 35.0.0 |
-| Android NDK | 27.0.12077973 |
-| SDK CMake | 3.22.1 |
+Only loopback, private and link-local IPv4 peers are accepted. This address filter is **not an authentication boundary**; protect the hotspot and set a server password.
 
-1. Clone the repository:
+## Build and test
 
-   ```bash
-   git clone https://github.com/JekaK/Local-Mumble-Server.git
-   cd Local-Mumble-Server
-   ```
-
-2. Open the repository root in Android Studio and select JDK 17 for Gradle.
-3. Install the SDK, Build-Tools, NDK and CMake versions above through SDK Manager.
-4. Configure the SDK path through Android Studio, `ANDROID_HOME` or your local
-   `local.properties`. Do not commit machine-specific SDK paths.
-5. Build and run lint:
-
-   ```bash
-   ./gradlew assembleDebug lintDebug
-   ```
-
-   On Windows: `gradlew.bat assembleDebug lintDebug`.
-
-6. Install `app/build/outputs/apk/debug/app-debug.apk` on a test phone. With USB
-   debugging and Android platform-tools, the optional command is:
-
-   ```bash
-   adb install -r app/build/outputs/apk/debug/app-debug.apk
-   ```
-
-Native dependencies are vendored. Gradle's `buildServer_*` tasks build all three
-ABIs and package the native executable automatically. No additional Termux or
-server installation is needed on the phone. For a production distribution,
-configure and retain your own release signing key; none is included here.
-Locally generated debug keys may differ from the supplied APK's key, so Android
-may refuse an in-place update between those builds. Uninstalling clears app
-settings and its TLS certificate.
-
-## Verification
-
-See [VALIDATION.md](VALIDATION.md) for recorded results and limitations.
-
-The Linux native test can be reproduced separately:
+Toolchain: **JDK 17**, **Gradle 8.11.1**, **AGP 8.9.1**, **Kotlin 2.1.20**, **Android SDK 35 / Build Tools 35.0.0**. No NDK or CMake is required.
 
 ```bash
-cmake -S app/src/main/cpp -B app/build/host -DCMAKE_BUILD_TYPE=Release
-cmake --build app/build/host --target umurmur_server -j 4
-python3 tests/protocol_smoke.py --binary app/build/host/libumurmur_server.so
+git clone https://github.com/JekaK/Local-Mumble-Server.git
+cd Local-Mumble-Server
+./gradlew :server-core:test :app:assembleDebug :app:lintDebug
 ```
 
-To include encrypted UDP voice checks, install `cryptography` in a Python
-virtual environment:
+On Windows, use `gradlew.bat`. Set the Android SDK path in Android Studio or an untracked `local.properties` file. First-time dependency downloads need internet.
+
+APK output: `app/build/outputs/apk/debug/app-debug.apk`.
+
+Run the identical Kotlin core on a development computer:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install cryptography
-.venv/bin/python tests/protocol_smoke.py --binary app/build/host/libumurmur_server.so --udp-voice
+./gradlew :server-core:installDist
+server-core/build/install/server-core/bin/server-core 64738 school-test
 ```
 
-These tests validate authentication, protocol messages and bidirectional Opus
-packet transport. They do not measure microphone-to-headphone latency.
-`tests/android_smoke.py` also exists; it requires an Android 15 x86-64 AVD named
-`mumble_test`. Its run in the original environment was blocked by emulator boot
-timeout, not counted as a pass.
+The third optional launcher argument sets its identity directory. This desktop launcher is for protocol testing; Android runs the core directly inside its foreground service.
 
-## Project layout
+A rebuild uses your machine's debug key. Updating an APK signed with another key fails; uninstalling clears app data and its certificate.
 
-| Path | Contents |
+## Project layout and licenses
+
+| Path | Purpose |
 | --- | --- |
-| `app/src/main/java/ua/school/localmumble/` | Activity, foreground service, configuration, IP detection and UDP probe |
-| `app/src/main/cpp/umurmur/` | Native server with Android adaptations |
-| `app/src/main/cpp/third_party/` | Mbed TLS, libconfig and protobuf-c source |
-| `app/src/main/assets/licenses/` | Third-party notices included in the APK |
-| `tests/` | Protocol, encrypted UDP and Android smoke tests |
-| `downloads/` | Prebuilt beta APK and its SHA-256 |
-| `README.uk.md` | Complete Ukrainian guide |
+| `app/src/main/kotlin/` | Android activity, foreground service and network helpers |
+| `server-core/src/main/kotlin/` | Kotlin server, protobuf wire codec, TLS identity and UDP transport |
+| `server-core/src/test/kotlin/` | Unit and socket integration tests |
+| `downloads/` | Current APK and SHA-256 checksum |
+| `licenses/` | Mumble BSD notice for the Kotlin OCB2 adaptation |
+| `VALIDATION.md` | Checks performed and remaining device-test limitations |
 
-## License and upstream projects
+The root [Apache-2.0 license](LICENSE) applies to original server-core code. The imported Android wrapper and its Kotlin adaptation retain [MIT](LICENSE-MIT). The OCB2 adaptation retains Mumble's BSD notice. Kotlin's standard library uses Apache-2.0. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-The repository's existing [Apache 2.0 license](LICENSE) is retained. The imported
-Android wrapper and test tools retain their [MIT license](LICENSE-MIT).
-Vendored dependencies keep their individual licenses, including LGPL for
-libconfig. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) records their exact
-source revisions, license texts and modifications.
-
-Upstream: [uMurmur](https://github.com/umurmur/umurmur),
-[Mumble](https://www.mumble.info/), [Mumla](https://mumla-app.gitlab.io/).
-This independent project is not endorsed by those teams.
+There is no bundled native Mumble server. Protocol compatibility and a Kotlin adaptation of the transport encryption algorithm do not add Murmur or uMurmur to the app.
