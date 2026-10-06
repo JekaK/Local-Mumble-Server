@@ -1,0 +1,154 @@
+/* Copyright (C) 2009-2014, Martin Johansson <martin@fatbob.nu>
+   Copyright (C) 2005-2014, Thorvald Natvig <thorvald@natvig.com>
+
+   All rights reserved.
+
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions
+   are met:
+
+   - Redistributions of source code must retain the above copyright notice,
+     this list of conditions and the following disclaimer.
+   - Redistributions in binary form must reproduce the above copyright notice,
+     this list of conditions and the following disclaimer in the documentation
+     and/or other materials provided with the distribution.
+   - Neither the name of the Developers nor the names of its contributors may
+     be used to endorse or promote products derived from this software without
+     specific prior written permission.
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+   ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+   A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR
+   CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+#ifndef CRYPTSTATE_H_34564356
+#define CRYPTSTATE_H_34564356
+
+#include "byteorder.h"
+#include "config.h"
+
+typedef struct CryptState cryptState_t;
+
+/*
+ * AES uses a fixed 16-byte block size across supported backends.
+ */
+#ifndef AES_BLOCK_SIZE
+#define AES_BLOCK_SIZE 16
+#endif
+
+/* Crypto backend: mbedTLS 4.x (PSA) */
+#if defined(USE_MBEDTLS4)
+
+#include <psa/crypto.h>
+
+#define CRYPT_AES_KEY psa_key_id_t
+
+#define CRYPT_RANDOM_BYTES(dest, size) do { \
+	if (psa_generate_random((unsigned char *)(dest), (size)) != PSA_SUCCESS) \
+		Log_fatal("psa_generate_random failed"); \
+} while (0)
+
+void CryptState_setEncryptKey(CRYPT_AES_KEY *dest, const unsigned char *source, int size);
+void CryptState_setDecryptKey(CRYPT_AES_KEY *dest, const unsigned char *source, int size);
+void CryptState_aesEncrypt(const unsigned char *src, unsigned char *dst, cryptState_t *cs);
+void CryptState_aesDecrypt(const unsigned char *src, unsigned char *dst, cryptState_t *cs);
+
+#define CRYPT_SET_ENC_KEY(dest, source, size) CryptState_setEncryptKey((dest), (source), (size))
+#define CRYPT_SET_DEC_KEY(dest, source, size) CryptState_setDecryptKey((dest), (source), (size))
+#define CRYPT_AES_ENCRYPT(src, dst, cryptstate) CryptState_aesEncrypt((const unsigned char *)(src), (unsigned char *)(dst), (cryptstate))
+#define CRYPT_AES_DECRYPT(src, dst, cryptstate) CryptState_aesDecrypt((const unsigned char *)(src), (unsigned char *)(dst), (cryptstate))
+
+/* Crypto backend: mbedTLS 3.x */
+#elif defined(USE_MBEDTLS)
+
+#include <mbedtls/aes.h>
+
+#define CRYPT_AES_KEY mbedtls_aes_context
+
+#define CRYPT_RANDOM_BYTES(dest, size) RAND_bytes((unsigned char *)(dest), (size))
+#define CRYPT_SET_ENC_KEY(dest, source, size) mbedtls_aes_setkey_enc((dest), (source), (size));
+#define CRYPT_SET_DEC_KEY(dest, source, size) mbedtls_aes_setkey_dec((dest), (source), (size));
+
+#define CRYPT_AES_ENCRYPT(src, dst, cryptstate) mbedtls_aes_crypt_ecb(&(cryptstate)->encrypt_key, MBEDTLS_AES_ENCRYPT, (unsigned char *)(src), (unsigned char *)(dst));
+#define CRYPT_AES_DECRYPT(src, dst, cryptstate) mbedtls_aes_crypt_ecb(&(cryptstate)->decrypt_key, MBEDTLS_AES_DECRYPT, (unsigned char *)(src), (unsigned char *)(dst));
+
+/* Crypto backend: GnuTLS/nettle */
+#elif defined(USE_GNUTLS)
+
+#include <nettle/aes.h>
+#include <gnutls/gnutls.h>
+#include <gnutls/crypto.h>
+
+#define CRYPT_AES_KEY struct aes128_ctx
+#define CRYPT_RANDOM_BYTES(dest, size) gnutls_rnd(GNUTLS_RND_KEY, (dest), (size))
+#define CRYPT_SET_ENC_KEY(dest, source, size) do { (void)(size); aes128_set_encrypt_key((dest), (source)); } while (0)
+#define CRYPT_SET_DEC_KEY(dest, source, size) do { (void)(size); aes128_set_decrypt_key((dest), (source)); } while (0)
+
+#define CRYPT_AES_ENCRYPT(src, dest, ctx) aes128_encrypt(&(ctx)->encrypt_key, AES_BLOCK_SIZE, (uint8_t *)(dest), (uint8_t *)(src))
+#define CRYPT_AES_DECRYPT(src, dest, ctx) aes128_decrypt(&(ctx)->decrypt_key, AES_BLOCK_SIZE, (uint8_t *)(dest), (uint8_t *)(src))
+
+/* Crypto backend: OpenSSL */
+#else
+
+#include <openssl/rand.h>
+#include <openssl/evp.h>
+
+#define CRYPT_AES_KEY EVP_CIPHER_CTX *
+#define CRYPT_RANDOM_BYTES(dest, size) RAND_bytes((unsigned char *)(dest), (size))
+void CryptState_setEncryptKey(CRYPT_AES_KEY *dest, const unsigned char *source, int size);
+void CryptState_setDecryptKey(CRYPT_AES_KEY *dest, const unsigned char *source, int size);
+void CryptState_aesEncrypt(const unsigned char *src, unsigned char *dst, cryptState_t *cs);
+void CryptState_aesDecrypt(const unsigned char *src, unsigned char *dst, cryptState_t *cs);
+
+#define CRYPT_SET_ENC_KEY(dest, source, size) CryptState_setEncryptKey((dest), (source), (size))
+#define CRYPT_SET_DEC_KEY(dest, source, size) CryptState_setDecryptKey((dest), (source), (size))
+
+#define CRYPT_AES_ENCRYPT(src, dst, cryptstate) CryptState_aesEncrypt((const unsigned char *)(src), (unsigned char *)(dst), (cryptstate))
+#define CRYPT_AES_DECRYPT(src, dst, cryptstate) CryptState_aesDecrypt((const unsigned char *)(src), (unsigned char *)(dst), (cryptstate))
+
+#endif
+
+#include <stdint.h>
+#include "timer.h"
+#include "types.h"
+
+struct CryptState {
+	uint8_t raw_key[AES_BLOCK_SIZE];
+	uint8_t encrypt_iv[AES_BLOCK_SIZE];
+	uint8_t decrypt_iv[AES_BLOCK_SIZE];
+	uint8_t decrypt_history[0x100];
+
+	unsigned int uiGood;
+	unsigned int uiLate;
+	unsigned int uiLost;
+	unsigned int uiResync;
+
+	unsigned int uiRemoteGood;
+	unsigned int uiRemoteLate;
+	unsigned int uiRemoteLost;
+	unsigned int uiRemoteResync;
+
+	CRYPT_AES_KEY encrypt_key;
+	CRYPT_AES_KEY decrypt_key;
+
+	etimer_t tLastGood;
+	etimer_t tLastRequest;
+	bool_t bInit;
+};
+
+void CryptState_init(cryptState_t *cs);
+bool_t CryptState_isValid(cryptState_t *cs);
+void CryptState_genKey(cryptState_t *cs);
+void CryptState_cleanup(cryptState_t *cs);
+
+bool_t CryptState_decrypt(cryptState_t *cs, const unsigned char *source, unsigned char *dst, unsigned int crypted_length);
+void CryptState_encrypt(cryptState_t *cs, const unsigned char *source, unsigned char *dst, unsigned int plain_length);
+
+#endif
