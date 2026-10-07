@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Локальний Mumble сервер</string>
+    <string name="screen_title">Локальний голосовий сервер</string>
+    <string name="screen_subtitle">Працює без інтернету через точку доступу телефона</string>
+    <string name="status_stopped">Сервер зупинено</string>
+    <string name="status_starting">Сервер запускається…</string>
+    <string name="status_running">Сервер працює</string>
+    <string name="status_stopping">Сервер зупиняється…</string>
+    <string name="status_error">Помилка: %1$s</string>
+    <string name="participants">Підключено учасників: %1$s</string>
+    <string name="probe_failed">UDP-перевірка не відповідає</string>
+    <string name="host_address">На цьому телефоні: 127.0.0.1:%1$d</string>
+    <string name="student_address">Для учнів: %1$s:%2$d</string>
+    <string name="missing_address">IP хотспота не видно. На телефоні учня: Wi-Fi → ця мережа → Шлюз. Адреса шлюзу, порт %1$d.</string>
+    <string name="port_label">Порт</string>
+    <string name="users_label">Максимум учасників</string>
+    <string name="bandwidth_label">Ліміт трафіку на користувача, біт/с</string>
+    <string name="password_label">Пароль сервера — необов’язково</string>
+    <string name="password_hint">Без пароля</string>
+    <string name="port_error">Порт: 1024–65535</string>
+    <string name="users_error">Учасники: 2–100</string>
+    <string name="bandwidth_error">Ліміт: 8000–128000 біт/с</string>
+    <string name="password_error">До 64 символів без керівних символів</string>
+    <string name="start_server">Запустити сервер</string>
+    <string name="stop_server">Зупинити сервер</string>
+    <string name="copy_addresses">Копіювати адреси</string>
+    <string name="server_logs">Журнал сервера</string>
+    <string name="hotspot_settings">Відкрити налаштування точки доступу</string>
+    <string name="instructions">Підключення:\n1. Увімкнути точку доступу Android.\n2. Запустити сервер.\n3. На цьому телефоні у Mumble-клієнті: 127.0.0.1.\n4. Учням: адреса телефона, показана вище.\n5. Порт однаковий для TCP та UDP.</string>
+    <string name="no_logs">Сервер ще не запускався</string>
+    <string name="close">Закрити</string>
+    <string name="copy">Копіювати</string>
+    <string name="copied">Скопійовано</string>
+    <string name="command_failed">Не вдалося виконати дію</string>
+    <string name="command_timeout">Сервіс не підтвердив зміну стану за 10 секунд. Перевірте журнал.</string>
+    <string name="hotspot_fallback">Відкрийте Налаштування → Точка доступу</string>
+</resources>

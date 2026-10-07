@@ -1,0 +1,4 @@
+This APK uses AndroidX Compose, Material 3, Fragment, Lifecycle AndroidX graphics-path 1.0.1 (libandroidx.graphics.path.so), and their transitive AndroidX libraries (Android Open Source Project contributors), and kotlinx.coroutines (JetBrains and contributors).
+These libraries are licensed under Apache License 2.0. The full Apache 2.0 text is included in kotlin-apache-2.0.txt in this directory.
+Sources: https://android.googlesource.com/platform/frameworks/support/ and https://github.com/Kotlin/kotlinx.coroutines
+Versions and other notices: THIRD_PARTY_NOTICES.md in the repository.

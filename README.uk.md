@@ -4,13 +4,13 @@
 
 Локальний голосовий сервер на Android-телефоні. Увімкніть точку доступу, запустіть сервер і підключіть інші пристрої через Mumble-сумісні клієнти. Власник телефона може одночасно говорити через окремий клієнт на тому самому телефоні.
 
-**У версії 2 вбудований uMurmur замінено власною реалізацією на Kotlin.** Android-застосунок і серверна логіка написані на Kotlin. Немає виконуваного Murmur/uMurmur, JNI-бібліотеки, NDK, CMake, Termux, потреби в root чи завантаженні рушія під час запуску.
+**У версії 2 вбудований uMurmur замінено власною реалізацією на Kotlin.** Android-застосунок і серверна логіка написані на Kotlin. Немає виконуваного Murmur/uMurmur, native-бібліотеки голосового сервера, NDK, CMake, Termux, потреби в root чи завантаженні рушія під час запуску.
 
-[Завантажити APK](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta1.apk) · [Встановлення](#покрокове-встановлення) · [Усунення-проблем](#усунення-проблем) · [Звіт-перевірки](VALIDATION.md)
+[Завантажити APK](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta2.apk) · [Встановлення](#покрокове-встановлення) · [Усунення-проблем](#усунення-проблем) · [Звіт-перевірки](VALIDATION.md)
 
 | Android | Версія | Виконання | Голосовий транспорт |
 | --- | --- | --- | --- |
-| 8.0+ | 2.0.0-beta1 | Kotlin та системні Android API | TLS 1.2+ і зашифрований UDP |
+| 8.0+ | 2.0.0-beta2 | Kotlin-сервер та Compose UI | TLS 1.2+ і зашифрований UDP |
 
 > **Бета-версія:** автоматичні тести перевіряють протокол Kotlin-сервера та передавання голосових пакетів. Вони не вимірюють затримку від мікрофона до динаміка, місткість реального класу чи сумісність з усіма iPhone-клієнтами. Роботу на фізичних Android/iPhone ще потрібно перевірити. Фактичні результати й обмеження наведені у [VALIDATION.md](VALIDATION.md).
 
@@ -31,7 +31,7 @@ Mumble тут — **протокол клієнтів**. Murmur і uMurmur — �
 | Компонент | Вимога |
 | --- | --- |
 | Телефон-сервер | Android 8.0+ з робочою Wi-Fi-точкою доступу |
-| Архітектура | Немає обмеження native ABI; той самий APK для ARM та x86 |
+| Архітектура | Універсальний APK: ARMv7, ARM64, x86 та x86_64; Compose містить графічну бібліотеку AndroidX |
 | Учасники | Mumble-сумісні клієнти з TLS 1.2+ |
 | Кодеки | Opus у всіх клієнтів або спільна версія CELT у всіх клієнтів |
 | Мережа | Локальний IPv4; TCP і UDP використовують той самий порт |
@@ -40,13 +40,13 @@ Mumble тут — **протокол клієнтів**. Murmur і uMurmur — �
 
 Коли всі клієнти підтримують Opus, сервер обирає Opus. Старий CELT-клієнт допускається, якщо вся група має спільну версію CELT. За відсутності спільного кодека клієнт отримує чітку відмову. **Перекодування аудіо немає.**
 
-Сервер використовує поширений старий формат голосових UDP-пакетів Mumble. Він оголошує сумісність з протоколом Mumble 1.2.4; версія самого застосунку — 2.0.0-beta1.
+Сервер використовує поширений старий формат голосових UDP-пакетів Mumble. Він оголошує сумісність з протоколом Mumble 1.2.4; версія самого застосунку — 2.0.0-beta2.
 
 ## Покрокове встановлення
 
 ### 1. Завантажте застосунки заздалегідь
 
-1. Завантажте [LocalMumbleServer-2.0.0-beta1.apk](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta1.apk).
+1. Завантажте [LocalMumbleServer-2.0.0-beta2.apk](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta2.apk).
 2. Для Android встановіть [Mumla](https://mumla-app.gitlab.io/) через [F-Droid](https://f-droid.org/packages/se.lublin.mumla/) або офіційне джерело.
 3. Для iPhone встановіть Mumble-сумісний клієнт і перевірте його із цим сервером до уроку.
 4. Якщо власник телефона говоритиме, встановіть клієнт і на телефон-сервер.
@@ -182,7 +182,7 @@ Foreground-сервіс і wake lock допомагають утримувати
 ```bash
 git clone https://github.com/JekaK/Local-Mumble-Server.git
 cd Local-Mumble-Server
-./gradlew :server-core:test :app:assembleDebug :app:lintDebug
+./gradlew :server-core:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
 ```
 
 Для Windows використовуйте `gradlew.bat`. Шлях SDK задається в Android Studio або локальному файлі `local.properties`, який не комітиться. Перша збірка завантажує залежності через інтернет.
@@ -200,11 +200,43 @@ server-core/build/install/server-core/bin/server-core 64738 school-test
 
 Збірка на іншому комп’ютері використовує його debug-ключ. APK з іншим підписом не встановиться поверх старого; видалення застосунку очищає дані й сертифікат.
 
+**Опублікований beta2 підписаний іншим debug-ключем, ніж beta1.** Перед
+встановленням видаліть попередній серверний застосунок: його налаштування та
+TLS-ідентичність очистяться. Окремий голосовий клієнт видаляти не потрібно.
+
+## Архітектура Android
+
+`MainActivity` містить лише `FragmentContainerView`. `ServerFragment` створює
+`ComposeView` зі стратегією `DisposeOnViewTreeLifecycleDestroyed`, обробляє
+дозвіл сповіщень, буфер обміну й відкриття системних налаштувань. Стан
+`ServerViewModel.uiState` збирається через `collectAsStateWithLifecycle`.
+XML-розмітки екрана немає.
+
+ViewModel перевіряє форму, надсилає команди запуску/зупинки та надає єдиний
+незмінний стан через `StateFlow`. Повторні натискання блокуються до підтвердження
+команди сервісом. Числові поля використовують `SavedStateHandle`. Незбережений
+пароль лишається в пам’яті: переживає звичайний поворот екрана разом із ViewModel,
+але не записується в Bundle збереженого стану. Прийняті налаштування зберігаються
+в попередньому приватному файлі preferences `MainActivity`.
+
+Контракт `ServerRepository` відділяє ViewModel від Android API. Android-реалізація
+працює з налаштуваннями, командами foreground-сервісу та спостереженням за його
+станом. IP-адреси й UDP перевіряються на `Dispatchers.IO`; опитування припиняється
+без підписників. Сервер працює у foreground-сервісі незалежно від життєвого циклу
+UI. Залежності передаються через `AppContainer` і явну фабрику ViewModel.
+
 ## Структура й ліцензії
 
 | Шлях | Призначення |
 | --- | --- |
-| `app/src/main/kotlin/` | Activity, foreground-сервіс і мережеві допоміжні класи |
+| `app/.../presentation/main/` | Activity з контейнером для відновлюваного Fragment |
+| `app/.../presentation/server/` | Fragment, Compose-екран, стан UI та ViewModel |
+| `app/.../presentation/theme/` | Тема Compose Material 3 |
+| `app/.../domain/` | Налаштування, стан сервера, валідація та контракт repository без Android API |
+| `app/.../data/` | Приватні preferences, команди сервісу, IP-адреси та UDP-перевірки |
+| `app/.../service/` | Foreground-сервіс і життєвий цикл Kotlin-сервера |
+| `app/.../di/` | Контейнер залежностей застосунку |
+| `app/src/test/kotlin/` | Тести валідації та ViewModel із підставним repository |
 | `server-core/src/main/kotlin/` | Kotlin-сервер, protobuf, TLS-ідентичність і UDP-транспорт |
 | `server-core/src/test/kotlin/` | Unit-тести та мережеві інтеграційні тести |
 | `downloads/` | Поточний APK і SHA-256 |

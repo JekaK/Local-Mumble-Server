@@ -16,7 +16,7 @@ captures/
 .cxx/
 *.aab
 *.apk
-!downloads/LocalMumbleServer-2.0.0-beta1.apk
+!downloads/LocalMumbleServer-2.0.0-beta2.apk
 output-metadata.json
 
 # IntelliJ

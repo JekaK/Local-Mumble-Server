@@ -1,4 +1,4 @@
-package ua.school.localmumble
+package ua.school.localmumble.service
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -13,6 +13,10 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import ua.school.localmumble.R
+import ua.school.localmumble.data.local.ServerStateStore
+import ua.school.localmumble.domain.model.ServerPhase
+import ua.school.localmumble.presentation.main.MainActivity
 import ua.school.localmumble.core.LocalVoiceServer
 import ua.school.localmumble.core.ServerOptions
 import java.io.File
@@ -23,6 +27,7 @@ class MumbleServerService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
     private val logs = ArrayDeque<String>()
+    private val stateStore by lazy { ServerStateStore(this) }
     @Volatile private var server: LocalVoiceServer? = null
     @Volatile private var stopping = false
     @Volatile private var generation = 0
@@ -89,13 +94,13 @@ class MumbleServerService : Service() {
     private fun stopServer() {
         if (stopping) return
         stopping = true; starting = false
-        if (state().getString(KEY_STATUS, "") != "ERROR") setState("STOPPING")
+        if (stateStore.read(serviceAlive).phase != ServerPhase.ERROR) setState("STOPPING")
         val current = generation
         io.execute {
             server?.close(); server = null
             handler.post {
                 if (generation == current) {
-                    if (state().getString(KEY_STATUS, "") != "ERROR") setState("STOPPED")
+                    if (stateStore.read(serviceAlive).phase != ServerPhase.ERROR) setState("STOPPED")
                     stopSelf()
                 }
             }
@@ -110,19 +115,18 @@ class MumbleServerService : Service() {
         io.execute { server?.close(); server = null }
         io.shutdown()
         wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
-        if (state().getString(KEY_STATUS, "") != "ERROR") setState("STOPPED")
+        if (stateStore.read(serviceAlive).phase != ServerPhase.ERROR) setState("STOPPED")
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
     override fun onBind(intent: Intent?): IBinder? = null
-    private fun state() = getSharedPreferences(PREFS, MODE_PRIVATE)
     private fun setState(status: String, error: String = "") {
-        state().edit().putString(KEY_STATUS, status).putString(KEY_ERROR, error).putInt(KEY_PORT, port).apply()
+        stateStore.write(ServerPhase.valueOf(status), port, error)
     }
     private fun appendLog(message: String) {
         logs.addLast(message.take(400))
         while (logs.size > 80) logs.removeFirst()
-        state().edit().putString(KEY_LOG, logs.joinToString("\n")).apply()
+        stateStore.writeLog(logs.joinToString("\n"))
         Log.i("LocalMumble", message)
     }
     private fun buildNotification(text: String): Notification {
@@ -141,11 +145,6 @@ class MumbleServerService : Service() {
         const val EXTRA_USERS = "users"
         const val EXTRA_BANDWIDTH = "bandwidth"
         const val EXTRA_PASSWORD = "password"
-        const val PREFS = "server_state"
-        const val KEY_STATUS = "status"
-        const val KEY_ERROR = "error"
-        const val KEY_PORT = "port"
-        const val KEY_LOG = "log"
         @Volatile var serviceAlive = false
         private const val CHANNEL_ID = "local_mumble_server"
         private const val NOTIFICATION_ID = 64738

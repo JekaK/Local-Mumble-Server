@@ -1,6 +1,6 @@
 # Third-party notices / Сторонні компоненти
 
-Version 2.0.0-beta1 contains an original Kotlin server implementation. Murmur,
+Version 2.0.0-beta2 contains an original Kotlin server implementation. Murmur,
 uMurmur, Mbed TLS, libconfig and protobuf-c are not bundled or used by this version.
 Their sources and the version-1 APK were removed from the current repository tree.
 Historical commits retain the older implementation.
@@ -9,6 +9,9 @@ Historical commits retain the older implementation.
 | --- | --- | --- |
 | Kotlin standard library 2.1.20 | Runtime language library | Apache-2.0 |
 | JetBrains annotations | Kotlin transitive annotations | Apache-2.0 |
+| AndroidX Compose (BOM 2025.04.01), Material 3, Fragment 1.8.6, Lifecycle 2.8.7 and transitive AndroidX libraries | Compose UI, Fragment hosting and lifecycle/ViewModel integration | Apache-2.0 |
+| AndroidX graphics-path 1.0.1 | Native path helper brought in by Compose; unrelated to the voice server | Apache-2.0 |
+| kotlinx.coroutines 1.10.1 | StateFlow and structured concurrency; coroutines-test is test-only | Apache-2.0 |
 | Mumble OCB2 algorithm adaptation | Kotlin implementation in `server-core/.../Ocb2.kt`; no native code | BSD-3-Clause |
 | Mumble OCB2 test vectors | Independent published vectors in Kotlin tests | BSD-3-Clause |
 | JUnit 4.13.2 / Hamcrest | Tests only, not packaged in the APK | EPL-1.0 / BSD-3-Clause |

@@ -4,13 +4,13 @@
 
 An offline voice server hosted directly on an Android phone. Turn on the phone's Wi-Fi hotspot, start the server, and let nearby devices join through a Mumble-compatible client. The host can speak through a separate client on the same phone.
 
-**Version 2 replaces the former native uMurmur engine with a Kotlin implementation.** The Android application and server logic are Kotlin. There is no Murmur/uMurmur executable, JNI library, NDK, CMake, Termux, root requirement, or runtime server download.
+**Version 2 replaces the former native uMurmur engine with a Kotlin implementation.** The Android application and server logic are Kotlin. There is no Murmur/uMurmur executable, native voice-server library, NDK, CMake, Termux, root requirement, or runtime server download.
 
-[Download APK](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta1.apk) · [Installation](#step-by-step-installation) · [Troubleshooting](#troubleshooting) · [Validation report](VALIDATION.md)
+[Download APK](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta2.apk) · [Installation](#step-by-step-installation) · [Troubleshooting](#troubleshooting) · [Validation report](VALIDATION.md)
 
 | Android | Version | Runtime | Voice transport |
 | --- | --- | --- | --- |
-| 8.0+ | 2.0.0-beta1 | Kotlin + Android platform APIs | TLS 1.2+ and encrypted UDP |
+| 8.0+ | 2.0.0-beta2 | Kotlin server + Compose UI | TLS 1.2+ and encrypted UDP |
 
 > **Beta:** automated tests exercise the Kotlin server's wire protocol and voice-packet transport. They do not establish real microphone-to-speaker latency, classroom capacity, or compatibility with every iPhone client. Physical Android/iPhone interoperability still needs a device test. See [VALIDATION.md](VALIDATION.md) for the actual checks and limitations.
 
@@ -31,7 +31,7 @@ The app **does not contain a microphone client**. Install a voice client separat
 | Item | Requirement |
 | --- | --- |
 | Host | Android 8.0 or newer with a working Wi-Fi hotspot |
-| Architecture | No native ABI restriction; ARM and x86 devices use the same APK |
+| Architecture | Universal APK: ARMv7, ARM64, x86 and x86_64; Compose includes an AndroidX graphics helper |
 | Participants | Mumble-compatible clients using TLS 1.2+ |
 | Codecs | Opus on all clients, or a common CELT bitstream version on all clients |
 | Network | Local IPv4; TCP and UDP use the same server port |
@@ -40,13 +40,13 @@ The app **does not contain a microphone client**. Install a voice client separat
 
 Opus is preferred when every connected client supports it. Legacy CELT-only clients are admitted when the whole group has a shared CELT codec. A client with no common codec receives an explicit rejection. There is **no audio transcoding**.
 
-The server speaks the widely implemented legacy Mumble UDP format. It advertises protocol compatibility with Mumble 1.2.4, while the application version is 2.0.0-beta1.
+The server speaks the widely implemented legacy Mumble UDP format. It advertises protocol compatibility with Mumble 1.2.4, while the application version is 2.0.0-beta2.
 
 ## Step-by-step installation
 
 ### 1. Download the applications before going offline
 
-1. Download [LocalMumbleServer-2.0.0-beta1.apk](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta1.apk).
+1. Download [LocalMumbleServer-2.0.0-beta2.apk](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta2.apk).
 2. On Android participant devices, install [Mumla](https://mumla-app.gitlab.io/) through [F-Droid](https://f-droid.org/packages/se.lublin.mumla/) or its official distribution.
 3. On iPhone, install a Mumble-compatible client and test it with this server before the lesson.
 4. Install a client on the host phone too if the host needs to speak.
@@ -182,7 +182,7 @@ Toolchain: **JDK 17**, **Gradle 8.11.1**, **AGP 8.9.1**, **Kotlin 2.1.20**, **An
 ```bash
 git clone https://github.com/JekaK/Local-Mumble-Server.git
 cd Local-Mumble-Server
-./gradlew :server-core:test :app:assembleDebug :app:lintDebug
+./gradlew :server-core:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
 ```
 
 On Windows, use `gradlew.bat`. Set the Android SDK path in Android Studio or an untracked `local.properties` file. First-time dependency downloads need internet.
@@ -200,11 +200,43 @@ The third optional launcher argument sets its identity directory. This desktop l
 
 A rebuild uses your machine's debug key. Updating an APK signed with another key fails; uninstalling clears app data and its certificate.
 
+**Published beta2 uses a different debug signing key from beta1.** Uninstall the
+previous server app before installing this APK; uninstalling clears settings and
+the server TLS identity. The separate voice client is unaffected.
+
+## Android architecture
+
+`MainActivity` contains only a `FragmentContainerView`. `ServerFragment` creates a
+`ComposeView` with `DisposeOnViewTreeLifecycleDestroyed`, owns notification
+permission/clipboard/settings actions and observes `ServerViewModel.uiState`
+using `collectAsStateWithLifecycle`. The screen has no XML layout.
+
+The ViewModel validates drafts, dispatches start/stop commands and exposes a
+single immutable `StateFlow`. A pending command blocks repeated taps until the
+service acknowledges it. Numeric drafts use `SavedStateHandle`; an unsaved
+password stays in memory and survives ordinary rotation with the ViewModel, but
+is not written into the saved-instance-state Bundle. Accepted settings retain
+the existing private `MainActivity` preference file.
+
+`ServerRepository` separates the ViewModel from Android APIs. Its Android
+implementation handles settings, foreground-service intents and cancellable
+status observation. Network discovery and UDP checks run on `Dispatchers.IO`;
+polling stops without subscribers. The foreground service owns the voice server
+independently of the UI lifecycle. Dependencies are wired through `AppContainer`
+and an explicit ViewModel factory.
+
 ## Project layout and licenses
 
 | Path | Purpose |
 | --- | --- |
-| `app/src/main/kotlin/` | Android activity, foreground service and network helpers |
+| `app/.../presentation/main/` | Activity hosting the restored Fragment |
+| `app/.../presentation/server/` | Fragment, Compose screen, immutable UI state and ViewModel |
+| `app/.../presentation/theme/` | Compose Material 3 theme |
+| `app/.../domain/` | Settings, server state, validation and repository contract; no Android APIs |
+| `app/.../data/` | Private preferences, service commands, IP discovery and UDP probes |
+| `app/.../service/` | Foreground service and Kotlin server lifetime |
+| `app/.../di/` | Application-scoped dependency container |
+| `app/src/test/kotlin/` | Validation and ViewModel tests with a fake repository |
 | `server-core/src/main/kotlin/` | Kotlin server, protobuf wire codec, TLS identity and UDP transport |
 | `server-core/src/test/kotlin/` | Unit and socket integration tests |
 | `downloads/` | Current APK and SHA-256 checksum |

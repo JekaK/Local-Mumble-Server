@@ -1,4 +1,4 @@
-package ua.school.localmumble
+package ua.school.localmumble.data.network
 
 import java.net.DatagramPacket
 import java.net.DatagramSocket

@@ -1,112 +1,102 @@
-# Перевірка 2.0.0-beta1 / Validation
+# Перевірка 2.0.0-beta2 / Validation
 
-Дата / Date: **2026-10-06**. APK: **LocalMumbleServer-2.0.0-beta1.apk**.
-Це бета з debug-підписом / This is a debug-signed beta.
+Дата / Date: **2026-10-07**. APK: **LocalMumbleServer-2.0.0-beta2.apk**.
+Debug-підпис / Debug-signed beta. Android 8.0+; minSdk 26, targetSdk 35, versionCode 3.
 
 ## Українською
 
-Поточний застосунок і серверна логіка переписані на Kotlin. uMurmur, його
-виконуваний файл, C/C++-джерела, Mbed TLS, libconfig, protobuf-c, NDK- та
-CMake-збірка видалені з поточної версії.
+MainActivity замінено контейнером для ServerFragment. Екран написаний на
+Jetpack Compose / Material 3; XML-розмітку й старі drawable-компоненти форми видалено.
+Логіка форми та команд винесена у ServerViewModel, дані — у ServerRepository.
+Пакети: presentation, domain, data, service, di. Kotlin-ядро голосового сервера
+залишилося без змін; Murmur/uMurmur не додавалися.
 
-### Фактично виконано
+### Виконані перевірки
 
 | Перевірка | Результат |
 | --- | --- |
-| `:server-core:test` | **18 тестів, 0 помилок і 0 невдалих тестів** |
-| `:server-core:installDist` | Kotlin-ядро зібране для незалежної перевірки клієнтом |
-| `:app:assembleDebug` | Android APK зібраний |
-| `:app:lintDebug` | 0 помилок; 31 попередження оформлення, доступності та локалізації UI |
-| Незалежний Python-клієнт протоколу | TLS-вхід, пароль, учасники, ping, Opus-пакети TLS та OCB2 UDP пройшли |
-| `apksigner verify` | Підпис APK v2 перевірений |
-| `zipalign -c 4` | Вирівнювання APK перевірене |
-| Перевірка вмісту APK | Немає `lib/` чи `.so`; ліцензійні повідомлення присутні |
-| README обома мовами | Локальні посилання, внутрішні якорі й блоки коду перевірені |
+| `:server-core:test` | 18 тестів; 0 failures / errors |
+| `:app:testDebugUnitTest` | 11 тестів; 0 failures / errors |
+| `:app:assembleDebug` | APK зібраний |
+| `:app:lintDebug` | 0 помилок; 1 попередження про новішу версію Compose BOM |
+| `apksigner verify --verbose --print-certs` | Підпис APK v2 перевірений |
+| `zipalign -c -P 16 4` | Вирівнювання ZIP та native-бібліотек перевірене |
+| ELF LOAD alignment | AndroidX graphics-path для всіх 4 ABI має вирівнювання 16384 байти |
+| Вміст APK | Єдині `.so` — AndroidX graphics-path для Compose; native-сервера немає |
+| Документація | Українська й англійська інструкції та структура пакетів оновлені |
 
-Незалежний клієнт використовував іншу реалізацію wire-протоколу й AES/OCB2 для
-коротких пакетів. Це одноразова додаткова перевірка; регресійні тести в репозиторії
-написані на Kotlin.
+Нові тести охоплюють:
 
-### Що охоплюють Kotlin-тести
+- Некоректні, переповнені й граничні числові параметри; пароль, Unicode та керівні символи.
+- Узгодженість допустимих параметрів UI з ServerOptions голосового ядра.
+- Блокування запуску при помилках форми й очищення помилки відредагованого поля.
+- Запуск/зупинку, повторні натискання та очікування підтвердження команди сервісом.
+- Помилку запуску, повторну спробу й timeout без зависання кнопок.
+- Відновлення числової форми через SavedStateHandle; незбережений пароль не потрапляє в Bundle.
+- Заборону редагування при активному сервері, реактивні журнал і лічильник.
+- Припинення спостереження repository без підписників та відновлення після повернення.
 
-- Вхід двох клієнтів, UTF-8-назва каналу, пароль, зайняте ім’я без урахування
-  регістру, заповнений сервер, лічильник і keep-alive.
-- Передавання Opus-пакетів в обидва боки через TLS та зашифрований UDP,
-  loopback-голос і повернення до TLS після тунельованого пакета.
-- CELT зі справжнім signed bitstream ID, вибір спільного кодека та чітка
-  відмова за відсутності сумісного кодека.
-- Self-mute і self-deafen, відхилення спроби змінити стан іншого учасника.
-- Ресинхронізація client nonce, відповідь на запит server nonce.
-- Невідомі повідомлення, обрізаний голосовий пакет, надмірний розмір
-  керівного кадру й повідомлення про відключення.
-- Збереження TLS-ідентичності після перезапуску, звільнення TCP/UDP-портів,
-  20 послідовних підключень/відключень без вичерпання слотів.
-- Граничні Mumble varint, protobuf, UTF-8 і некоректні вхідні дані.
-- Опубліковані незалежні OCB2-вектори, довжини 0–1000 байтів,
-  втрата/запізнення/повторення/підміна пакетів і перехід nonce через 255.
-- XEX* counter-cryptanalysis: модифікація критичного блока й відхилення
-  незалежно побудованого підробленого пакета.
+18 серверних тестів перевіряють TLS-вхід, пароль/імена/місткість, Opus і CELT,
+передавання через TLS та зашифрований UDP, mute/deafen, nonce resync, повторні
+підключення, звільнення портів, protobuf/varint, незалежні OCB2-вектори та XEX* forgery.
 
-### Артефакт і середовище
+Виправлено знайдену lint-помилку API 27 у темі, зберігши підтримку API 26.
+Поточний Compose BOM зафіксовано на 2025.04.01; попередження про новішу версію
+не приховується. Перша повна збірка завантажувала залежності; фінальна перевірка
+тих самих Gradle-завдань успішно виконана також з `--offline`.
 
-- APK: **948801 байт**, Android 8.0+ (minSdk 26), targetSdk 35.
-- SHA-256: `81eb76b9a4c86970f93f44fd7bdd45eaa0daaa1d158822fbbecae93bedb214cb`.
-- JDK 17, Gradle 8.11.1, AGP 8.9.1, Kotlin 2.1.20,
-  Android SDK 35 / Build Tools 35.0.0.
-- Одна збірка APK для архітектур, що підтримуються Android: native ABI немає.
-- Debug-сертифікат APK відрізняється від 1.0.0-beta1. Для переходу потрібно
-  видалити попередній серверний застосунок; його дані очистяться.
+### APK та підпис
 
-### Що ще не перевірено
+- Розмір: **10876744 байт**.
+- SHA-256: `c81a20546f74db59c267d76a42a0b268ffd3b4a987849ee2346cbdea42356815`.
+- Сертифікат підпису SHA-256: `a028d9a6f8ba2d404189e24480cc806fbf22298048f932c71a2137a706a31795`.
+- Підпис відрізняється від опублікованого 2.0.0-beta1. Перед встановленням
+  видаліть попередній серверний застосунок; це очистить його налаштування й TLS-ідентичність.
+- JDK 17; Gradle 8.11.1; AGP 8.9.1; Kotlin / Compose compiler 2.1.20;
+  Compose BOM 2025.04.01; Fragment 1.8.6; Lifecycle 2.8.7; SDK / Build Tools 35.
 
-**Встановлення й запуск цієї Kotlin-версії на фізичному Android не виконувалися
-в цьому середовищі. Реальний Android/iPhone-клієнт, мікрофон, динамік,
-затримка звуку, енергозбереження та урок із багатьма телефонами не тестувалися.**
+### Межі перевірки
 
-У середовищі немає KVM чи підключеного Android-пристрою; успішного
-емуляторного/instrumentation-прогону не заявляється.
+**Фізичний Android, емулятор та instrumentation/UI-тести не запускалися.**
+ViewModel перевірений JVM-тестами; реальний поворот екрана, системні діалоги,
+клавіатура й вигляд Compose на телефоні ще не перевірені. Перевірка збереженого
+стану відтворює відновлення SavedStateHandle, а не повний Android process-death.
 
-Повідомлення власника про успішний запуск старої версії стосувалося
-1.0.0-beta1 з native-рушієм. Воно не є перевіркою нової Kotlin-версії.
-Попередня причина iPhone “Connecting” не встановлена; нові перевірки кодека
-та журнал допомагають діагностувати її, але не доводять її усунення.
-
-Тести перевіряють передавання закодованих пакетів. Вони не декодують голос і
-не вимірюють акустичну затримку чи якість звуку.
+Android/iPhone, мікрофон/динамік, затримка звуку, екран вимкнений та місткість класу
+залишаються неперевіреними. Причина попереднього iPhone Connecting не встановлена.
+Тести пересилають закодовані пакети й не вимірюють акустичну затримку.
+Незалежний Python-клієнт перевіряв beta1; для beta2 його повторно не запускали.
 
 ## English
 
-The Android app and server logic are Kotlin. The current version removes
-uMurmur, its executable, the vendored C/C++ dependencies and NDK/CMake tasks.
+The Android UI now uses a Fragment-hosted Compose / Material 3 screen and a
+ViewModel exposing immutable StateFlow state. Repository implementations own
+Android preferences, service commands and network probes. The existing Kotlin
+voice engine is unchanged. XML screen layouts and their old button/card drawables
+were removed; Android manifests, styles, strings and the icon remain resources.
 
-Completed checks:
+**29 tests passed: 18 core protocol/socket tests and 11 validation/ViewModel tests;
+zero failures and errors.** Debug APK build passed. Lint reports **0 errors and
+1 warning** about a newer Compose BOM; the current BOM is intentionally pinned.
+Final verification of all four Gradle tasks also succeeded offline.
 
-| Check | Result |
-| --- | --- |
-| Kotlin unit/socket suite | **18 tests; 0 failures; 0 errors** |
-| Android debug build | Passed |
-| Android lint | 0 errors; 31 UI/accessibility/localization warnings |
-| Independent protocol client | TLS login, rejection, participant count, ping, bidirectional Opus TLS and encrypted UDP passed |
-| APK v2 signature / ZIP alignment | Verified |
-| APK payload | No native libraries; required runtime notices present |
-| Documentation | Both languages, local links, anchors and code fences checked |
+The new tests cover invalid/boundary settings and core compatibility, password
+rules, field errors, start/stop acknowledgement, duplicate taps, startup failures,
+retry/timeout handling, numeric saved-state restoration, in-memory unsaved
+passwords, running-state form locking, reactive logs/counts, and stopping/resuming
+repository observation with UI subscribers.
 
-The suite covers codec negotiation, legacy signed CELT IDs, self-mute/deafen,
-voice loopback, UDP replay/tamper/late/loss behavior, TLS fallback, nonce
-resynchronization, malformed frames, certificate persistence, socket shutdown
-and repeated connections. OCB2 is checked against published independent vectors
-and an independently constructed XEX* forgery.
+APK: **10876744 bytes**. SHA-256: `c81a20546f74db59c267d76a42a0b268ffd3b4a987849ee2346cbdea42356815`.
+APK v2 signature and ZIP alignment (`zipalign -c -P 16 4`) passed. Compose brings
+`libandroidx.graphics.path.so` for ARMv7, ARM64, x86 and x86_64; all ELF LOAD
+segments are aligned to 16384 bytes. No native voice server is packaged.
 
-Final APK: **948801 bytes**, minSdk 26, targetSdk 35.
-SHA-256: `81eb76b9a4c86970f93f44fd7bdd45eaa0daaa1d158822fbbecae93bedb214cb`.
+The debug signing certificate differs from the published beta1. Uninstall the
+previous server app first; its preferences and TLS identity will be cleared.
 
-The debug signing certificate differs from the version-1 APK; uninstall the
-old server app before installing this version. Uninstalling clears app data.
-
-**This Kotlin APK has not been installed/run on a physical Android device in
-this environment. Android/iPhone microphone-to-speaker audio, real latency,
-screen-off behavior and classroom capacity remain unverified.** There is no
-successful emulator/instrumentation run to report. The earlier user-reported
-startup belonged to the old native version and does not validate this rewrite.
-The earlier iPhone “Connecting” issue is not claimed fixed without device logs
-and a successful device test.
+**No physical-device, emulator or instrumentation/UI run was performed.** JVM
+ViewModel tests do not establish real Fragment/Compose rotation, Android process
+death, keyboard/permission flows or visual behavior. Android/iPhone audio,
+latency, screen-off behavior and classroom capacity remain unverified. The prior
+iPhone Connecting issue is not claimed fixed. The earlier independent Python
+protocol check belonged to beta1 and was not repeated for beta2.
