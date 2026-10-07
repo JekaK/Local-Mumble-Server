@@ -1,6 +1,6 @@
 # Third-party notices / Сторонні компоненти
 
-Version 2.0.0-beta2 contains an original Kotlin server implementation. Murmur,
+Version 2.0.0-beta3 contains an original Kotlin server implementation. Murmur,
 uMurmur, Mbed TLS, libconfig and protobuf-c are not bundled or used by this version.
 Their sources and the version-1 APK were removed from the current repository tree.
 Historical commits retain the older implementation.

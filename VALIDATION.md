@@ -1,102 +1,122 @@
-# Перевірка 2.0.0-beta2 / Validation
+# Перевірка 2.0.0-beta3 / Validation
 
-Дата / Date: **2026-10-07**. APK: **LocalMumbleServer-2.0.0-beta2.apk**.
-Debug-підпис / Debug-signed beta. Android 8.0+; minSdk 26, targetSdk 35, versionCode 3.
+Дата / Date: **2026-10-07**. APK: **LocalMumbleServer-2.0.0-beta3.apk**.
+Debug-підпис / Debug-signed beta. Android 8.0+; minSdk 26, targetSdk 35, versionCode 4.
 
 ## Українською
 
-MainActivity замінено контейнером для ServerFragment. Екран написаний на
-Jetpack Compose / Material 3; XML-розмітку й старі drawable-компоненти форми видалено.
-Логіка форми та команд винесена у ServerViewModel, дані — у ServerRepository.
-Пакети: presentation, domain, data, service, di. Kotlin-ядро голосового сервера
-залишилося без змін; Murmur/uMurmur не додавалися.
+### Виправлення iOS Connecting
+
+Сервер раніше записував тип повідомлення (2 байти), довжину (4 байти) й тіло
+окремими викликами SSLSocket OutputStream. Це розділяло заголовок на TLS-записи.
+[Старий MumbleKit, `_dataReady`](https://github.com/mumble-voip/mumblekit/blob/b9085ec88d305ed28be89ceca14d53670769bcf9/src/MKConnection.m#L793-L830)
+читає шестибайтовий заголовок одним викликом і відкидає короткий результат,
+не накопичуючи байти для наступного читання. Така поведінка несумісна
+з попереднім способом передавання кадрів нашим сервером.
+
+До зміни ядра додано два регресійні тести з таким читачем через справжні
+JVM TLS-сокети. **Обидва впали на старому коді:**
+`expected:<6> but was:<2>` для TLS 1.2 та TLS 1.3.
+Після серіалізації всього кадру в один ByteArray й одного запису в TLS-потік
+**обидва тести пройшли**.
+
+Тести перевіряють не лише заголовок: отримання CryptSetup, CodecVersion,
+кореневого ChannelState, власного UserState перед ServerSync, завершення
+авторизації, ping, голосовий loopback через TLS і відмову за неправильний пароль.
+Формат протоколу, транспортне шифрування та узгодження кодеків не змінені.
+Версію у повідомленні Version синхронізовано з APK: 2.0.0-beta3.
+
+Лічильник учасників означає авторизовані серверні сесії. Він зростає до
+підтвердження, що клієнт прочитав ServerSync; протокол не надає такого
+підтвердження. Зелений статус означає відкриті TCP/UDP-сокети сервера.
 
 ### Виконані перевірки
 
 | Перевірка | Результат |
 | --- | --- |
-| `:server-core:test` | 18 тестів; 0 failures / errors |
-| `:app:testDebugUnitTest` | 11 тестів; 0 failures / errors |
+| `:server-core:test` | 20 тестів; 0 failures / errors / skipped |
+| `:app:testDebugUnitTest` | 11 тестів; 0 failures / errors / skipped |
 | `:app:assembleDebug` | APK зібраний |
-| `:app:lintDebug` | 0 помилок; 1 попередження про новішу версію Compose BOM |
+| `:app:lintDebug` | 0 помилок та попереджень у звіті lint |
 | `apksigner verify --verbose --print-certs` | Підпис APK v2 перевірений |
 | `zipalign -c -P 16 4` | Вирівнювання ZIP та native-бібліотек перевірене |
-| ELF LOAD alignment | AndroidX graphics-path для всіх 4 ABI має вирівнювання 16384 байти |
-| Вміст APK | Єдині `.so` — AndroidX graphics-path для Compose; native-сервера немає |
-| Документація | Українська й англійська інструкції та структура пакетів оновлені |
+| ELF LOAD alignment | AndroidX graphics-path для всіх 4 ABI має вирівнювання щонайменше 16384 байти |
+| Вміст APK | Єдині `.so` — AndroidX graphics-path; їхні байти ідентичні beta2; native-сервера немає |
+| Версія APK / ядра | versionCode 4; 2.0.0-beta3; новий рядок Version знайдений у DEX |
+| Документація | Українська й англійська інструкції та сценарій Connecting оновлені |
 
-Нові тести охоплюють:
+Окрім двох нових TLS-регресій, серверні тести перевіряють пароль/імена/місткість,
+Opus і CELT, двостороннє передавання через TLS та зашифрований UDP, mute/deafen,
+nonce resync, повторні підключення, звільнення портів, protobuf/varint,
+незалежні OCB2-вектори та XEX* forgery. Android-тести перевіряють валідацію
+та ViewModel: команди, підтвердження сервісу, повторні натискання, помилки,
+timeout, SavedStateHandle й життєвий цикл підписки repository.
 
-- Некоректні, переповнені й граничні числові параметри; пароль, Unicode та керівні символи.
-- Узгодженість допустимих параметрів UI з ServerOptions голосового ядра.
-- Блокування запуску при помилках форми й очищення помилки відредагованого поля.
-- Запуск/зупинку, повторні натискання та очікування підтвердження команди сервісом.
-- Помилку запуску, повторну спробу й timeout без зависання кнопок.
-- Відновлення числової форми через SavedStateHandle; незбережений пароль не потрапляє в Bundle.
-- Заборону редагування при активному сервері, реактивні журнал і лічильник.
-- Припинення спостереження repository без підписників та відновлення після повернення.
-
-18 серверних тестів перевіряють TLS-вхід, пароль/імена/місткість, Opus і CELT,
-передавання через TLS та зашифрований UDP, mute/deafen, nonce resync, повторні
-підключення, звільнення портів, protobuf/varint, незалежні OCB2-вектори та XEX* forgery.
-
-Виправлено знайдену lint-помилку API 27 у темі, зберігши підтримку API 26.
-Поточний Compose BOM зафіксовано на 2025.04.01; попередження про новішу версію
-не приховується. Перша повна збірка завантажувала залежності; фінальна перевірка
-тих самих Gradle-завдань успішно виконана також з `--offline`.
+Усі чотири Gradle-завдання завершилися одним успішним запуском.
+Залежності й архітектуру Fragment / Compose / ViewModel не змінювали.
 
 ### APK та підпис
 
-- Розмір: **10876744 байт**.
-- SHA-256: `c81a20546f74db59c267d76a42a0b268ffd3b4a987849ee2346cbdea42356815`.
-- Сертифікат підпису SHA-256: `a028d9a6f8ba2d404189e24480cc806fbf22298048f932c71a2137a706a31795`.
-- Підпис відрізняється від опублікованого 2.0.0-beta1. Перед встановленням
-  видаліть попередній серверний застосунок; це очистить його налаштування й TLS-ідентичність.
-- JDK 17; Gradle 8.11.1; AGP 8.9.1; Kotlin / Compose compiler 2.1.20;
-  Compose BOM 2025.04.01; Fragment 1.8.6; Lifecycle 2.8.7; SDK / Build Tools 35.
+- Розмір: **10431433 байт**.
+- SHA-256: `514ba825760a98dd110dd900b31d3c0ffabcdc5fa9838df13d8bb8824b2f19df`.
+- Сертифікат підпису SHA-256: `839d33c36b8a2a8129ea5657ca43f0b49ea7c1ce4567c8cea2a3a408f353e1a9`.
+- Підпис відрізняється від опублікованих попередніх APK. Перед встановленням
+  видаліть старий серверний застосунок; його налаштування й TLS-ідентичність очистяться.
+  Окремий голосовий клієнт видаляти не потрібно.
+- Ключ beta3 збережений окремо як `LocalMumbleServer-beta-signing.jks`
+  для наступних оновлень; приватний ключ не включений у Git-репозиторій.
+
+Збірка: JDK 17; Gradle 8.11.1; AGP 8.9.1; Kotlin / Compose compiler 2.1.20;
+Compose BOM 2025.04.01; Fragment 1.8.6; Lifecycle 2.8.7; SDK / Build Tools 35.
 
 ### Межі перевірки
 
-**Фізичний Android, емулятор та instrumentation/UI-тести не запускалися.**
-ViewModel перевірений JVM-тестами; реальний поворот екрана, системні діалоги,
-клавіатура й вигляд Compose на телефоні ще не перевірені. Перевірка збереженого
-стану відтворює відновлення SavedStateHandle, а не повний Android process-death.
+**Фізичні Android/iPhone, емулятор та instrumentation/UI-тести не запускалися.**
+Регресія відтворює читання заголовка MumbleKit у JVM-клієнті; це не запуск
+самого iOS-застосунку або Android TLS-провайдера. Виправлено відтворену
+несумісність, але усунення конкретного зависання на телефоні користувача
+ще не підтверджене тестом на його пристрої.
 
-Android/iPhone, мікрофон/динамік, затримка звуку, екран вимкнений та місткість класу
-залишаються неперевіреними. Причина попереднього iPhone Connecting не встановлена.
+Мікрофон/динамік, затримка звуку, робота з вимкненим екраном, місткість класу,
+реальні Fragment/Compose lifecycle та системні діалоги залишаються неперевіреними.
 Тести пересилають закодовані пакети й не вимірюють акустичну затримку.
-Незалежний Python-клієнт перевіряв beta1; для beta2 його повторно не запускали.
+Незалежний Python-клієнт перевіряв beta1; у цій перевірці його не запускали.
 
 ## English
 
-The Android UI now uses a Fragment-hosted Compose / Material 3 screen and a
-ViewModel exposing immutable StateFlow state. Repository implementations own
-Android preferences, service commands and network probes. The existing Kotlin
-voice engine is unchanged. XML screen layouts and their old button/card drawables
-were removed; Android manifests, styles, strings and the icon remain resources.
+Beta3 fixes outgoing TLS framing that is incompatible with legacy iOS MumbleKit.
+The old writer used separate writes for the two-byte type, four-byte length and
+body. MumbleKit's linked header reader drops a read shorter than six bytes.
+The server now serializes the complete frame and sends it in one TLS-stream write.
+This avoids splitting the header between TLS records; it does not establish a
+general guarantee that arbitrary stream clients can ignore partial reads.
 
-**29 tests passed: 18 core protocol/socket tests and 11 validation/ViewModel tests;
-zero failures and errors.** Debug APK build passed. Lint reports **0 errors and
-1 warning** about a newer Compose BOM; the current BOM is intentionally pinned.
-Final verification of all four Gradle tasks also succeeded offline.
+**Before the patch, both new regression tests failed with
+`expected:<6> but was:<2>` over TLS 1.2 and TLS 1.3. After the patch, both passed.**
+They use real JVM TLS sockets and check channel/user state before ServerSync,
+crypto and codec setup, authentication, ping, tunneled voice loopback and rejection.
+The server's advertised release string now matches the APK version.
 
-The new tests cover invalid/boundary settings and core compatibility, password
-rules, field errors, start/stop acknowledgement, duplicate taps, startup failures,
-retry/timeout handling, numeric saved-state restoration, in-memory unsaved
-passwords, running-state form locking, reactive logs/counts, and stopping/resuming
-repository observation with UI subscribers.
+**31 tests passed: 20 core protocol/socket tests and 11 Android validation/ViewModel
+unit tests; zero failures, errors or skipped tests.** All four Gradle tasks completed
+in one successful run. APK build passed; the lint report contains no errors or
+warnings. Existing Fragment/Compose/ViewModel architecture and dependency versions
+are unchanged. APK v2 signature verification, 16 KiB ZIP/native alignment and ELF
+LOAD alignment checks passed. The four native graphics helpers are byte-identical
+to beta2; there is no native voice server.
 
-APK: **10876744 bytes**. SHA-256: `c81a20546f74db59c267d76a42a0b268ffd3b4a987849ee2346cbdea42356815`.
-APK v2 signature and ZIP alignment (`zipalign -c -P 16 4`) passed. Compose brings
-`libandroidx.graphics.path.so` for ARMv7, ARM64, x86 and x86_64; all ELF LOAD
-segments are aligned to 16384 bytes. No native voice server is packaged.
+APK: **10431433 bytes**. SHA-256:
+`514ba825760a98dd110dd900b31d3c0ffabcdc5fa9838df13d8bb8824b2f19df`.
+Signing certificate SHA-256:
+`839d33c36b8a2a8129ea5657ca43f0b49ea7c1ce4567c8cea2a3a408f353e1a9`.
+The debug signing key differs from earlier published APKs. Uninstall the old server
+app first; this clears its preferences and TLS identity. The separate voice client
+is unaffected. The beta3 key has a separate private backup named
+`LocalMumbleServer-beta-signing.jks` for future updates; it is not in this repository.
 
-The debug signing certificate differs from the published beta1. Uninstall the
-previous server app first; its preferences and TLS identity will be cleared.
-
-**No physical-device, emulator or instrumentation/UI run was performed.** JVM
-ViewModel tests do not establish real Fragment/Compose rotation, Android process
-death, keyboard/permission flows or visual behavior. Android/iPhone audio,
-latency, screen-off behavior and classroom capacity remain unverified. The prior
-iPhone Connecting issue is not claimed fixed. The earlier independent Python
-protocol check belonged to beta1 and was not repeated for beta2.
+**No physical Android/iPhone, emulator or instrumentation/UI test was run.**
+The regression mimics the upstream header reader; it does not execute the iOS app
+or Android TLS provider. This is a tested interoperability correction, not proof
+that the user's specific iPhone hang is resolved. Real microphone-to-speaker audio,
+latency, screen-off behavior, classroom capacity and Android UI lifecycle remain
+unverified. The independent Python protocol check was not repeated.

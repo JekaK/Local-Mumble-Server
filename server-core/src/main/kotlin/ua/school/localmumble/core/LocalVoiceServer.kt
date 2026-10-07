@@ -242,7 +242,7 @@ class LocalVoiceServer(
                     try { while (!closed.get()) { val frame = outgoing.take(); if (frame.type < 0) break; write(frame) } }
                     catch (_: Exception) { close() }
                 }
-                send(0, Proto.build { number(1, VERSION); text(2, "Local Kotlin Voice Server 2.0.0-beta1"); text(3, "Android/JVM") })
+                send(0, Proto.build { number(1, VERSION); text(2, "Local Kotlin Voice Server 2.0.0-beta3"); text(3, "Android/JVM") })
                 val input = DataInputStream(socket.inputStream)
                 while (!closed.get()) {
                     val type = input.readUnsignedShort()
@@ -302,7 +302,11 @@ class LocalVoiceServer(
         }
         private fun write(frame: Frame) {
             val stream = output ?: return
-            synchronized(stream) { stream.writeShort(frame.type); stream.writeInt(frame.body.size); stream.write(frame.body); stream.flush() }
+            // Legacy iOS MumbleKit drops short header reads. Separate SSLSocket writes
+            // split the six-byte header into TLS records; keep the entire frame together.
+            val bytes = ByteBuffer.allocate(6 + frame.body.size)
+                .putShort(frame.type.toShort()).putInt(frame.body.size).put(frame.body).array()
+            synchronized(stream) { stream.write(bytes); stream.flush() }
         }
         fun voice(packet: ByteArray) {
             val destination = endpoint

@@ -6,11 +6,11 @@ An offline voice server hosted directly on an Android phone. Turn on the phone's
 
 **Version 2 replaces the former native uMurmur engine with a Kotlin implementation.** The Android application and server logic are Kotlin. There is no Murmur/uMurmur executable, native voice-server library, NDK, CMake, Termux, root requirement, or runtime server download.
 
-[Download APK](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta2.apk) · [Installation](#step-by-step-installation) · [Troubleshooting](#troubleshooting) · [Validation report](VALIDATION.md)
+[Download APK](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta3.apk) · [Installation](#step-by-step-installation) · [Troubleshooting](#troubleshooting) · [Validation report](VALIDATION.md)
 
 | Android | Version | Runtime | Voice transport |
 | --- | --- | --- | --- |
-| 8.0+ | 2.0.0-beta2 | Kotlin server + Compose UI | TLS 1.2+ and encrypted UDP |
+| 8.0+ | 2.0.0-beta3 | Kotlin server + Compose UI | TLS 1.2+ and encrypted UDP |
 
 > **Beta:** automated tests exercise the Kotlin server's wire protocol and voice-packet transport. They do not establish real microphone-to-speaker latency, classroom capacity, or compatibility with every iPhone client. Physical Android/iPhone interoperability still needs a device test. See [VALIDATION.md](VALIDATION.md) for the actual checks and limitations.
 
@@ -40,13 +40,13 @@ The app **does not contain a microphone client**. Install a voice client separat
 
 Opus is preferred when every connected client supports it. Legacy CELT-only clients are admitted when the whole group has a shared CELT codec. A client with no common codec receives an explicit rejection. There is **no audio transcoding**.
 
-The server speaks the widely implemented legacy Mumble UDP format. It advertises protocol compatibility with Mumble 1.2.4, while the application version is 2.0.0-beta2.
+The server speaks the widely implemented legacy Mumble UDP format. It advertises protocol compatibility with Mumble 1.2.4, while the application version is 2.0.0-beta3.
 
 ## Step-by-step installation
 
 ### 1. Download the applications before going offline
 
-1. Download [LocalMumbleServer-2.0.0-beta2.apk](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta2.apk).
+1. Download [LocalMumbleServer-2.0.0-beta3.apk](https://github.com/JekaK/Local-Mumble-Server/raw/refs/heads/master/downloads/LocalMumbleServer-2.0.0-beta3.apk).
 2. On Android participant devices, install [Mumla](https://mumla-app.gitlab.io/) through [F-Droid](https://f-droid.org/packages/se.lublin.mumla/) or its official distribution.
 3. On iPhone, install a Mumble-compatible client and test it with this server before the lesson.
 4. Install a client on the host phone too if the host needs to speak.
@@ -54,8 +54,8 @@ The server speaks the widely implemented legacy Mumble UDP format. It advertises
 
 Verify the APK against [downloads/SHA256SUMS](downloads/SHA256SUMS). This repository publishes a **debug-signed beta**, not a Play Store release.
 
-**Upgrading from 1.0.0-beta1:** this published APK has a different debug signing
-certificate. Uninstall the old server app before installing version 2. This clears
+**Upgrading from an earlier published APK:** beta3 has a different debug signing
+certificate. Uninstall the old server app before installing beta3. This clears
 its settings and TLS identity; your separate voice-client app is unaffected.
 
 ### 2. Install the APK on the Android host
@@ -135,7 +135,9 @@ The foreground service and wake lock help keep the app running. Manufacturer pow
 
 ## iPhone connection checks
 
-The earlier iPhone report was a client staying at “Connecting”; its cause was not established. A Kotlin rewrite alone does not prove that issue is fixed.
+**Start with beta3 if iOS stays at “Connecting” while the server counts a participant.** The count means authentication was accepted; it does not confirm that the client received `ServerSync`. Green means the server's TCP/UDP sockets are running.
+
+The previous server split each outgoing frame into separate TLS writes for its type, length and body. [Legacy MumbleKit's header reader](https://github.com/mumble-voip/mumblekit/blob/b9085ec88d305ed28be89ceca14d53670769bcf9/src/MKConnection.m#L793-L830) discards reads shorter than the six-byte header. Beta3 writes the complete frame in one TLS write to avoid that incompatibility. The regression tests reproduce this reader behavior over real JVM TLS sockets; a physical iPhone test is still required.
 
 - Allow the client's local-network permission in iOS settings; [Apple's instructions](https://support.apple.com/en-us/102229).
 - Confirm the iPhone is connected to the host hotspot and uses the correct host IP/port.
@@ -151,7 +153,8 @@ No real iPhone compatibility or latency claim is made without a device test.
 | Symptom | Check or correction |
 | --- | --- |
 | Server does not start | Read the log; check port conflicts and configuration ranges |
-| Client stays at Connecting | Host IP, port, hotspot membership, local-network permission, certificate and server log |
+| Connecting while the server counts that client | Install beta3's TLS framing fix; accept the new certificate and reconnect |
+| Connecting with no authenticated participant | Host IP, port, hotspot membership, local-network permission, certificate and server log |
 | TLS failure | Client must support TLS 1.2+; inspect its certificate prompt |
 | Wrong server password | Enter the app's server password, not the hotspot password |
 | Username already in use | Give each device a different username; comparison is case-insensitive |
@@ -200,7 +203,7 @@ The third optional launcher argument sets its identity directory. This desktop l
 
 A rebuild uses your machine's debug key. Updating an APK signed with another key fails; uninstalling clears app data and its certificate.
 
-**Published beta2 uses a different debug signing key from beta1.** Uninstall the
+**Published beta3 uses a different debug signing key from earlier APKs.** Uninstall the
 previous server app before installing this APK; uninstalling clears settings and
 the server TLS identity. The separate voice client is unaffected.
 

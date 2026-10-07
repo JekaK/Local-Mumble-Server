@@ -32,6 +32,26 @@ class ServerIntegrationTest {
     private fun client(name: String, password: String = "school-test", opus: Boolean = true, celt: Int? = null): Client =
         Client(server.port, name, password, opus, celt).also { clients += it }
 
+    @Test fun legacyIosHeadersOverTls12() = verifyLegacyIosHeaders("TLSv1.2")
+    @Test fun legacyIosHeadersOverTls13() = verifyLegacyIosHeaders("TLSv1.3")
+
+    private fun verifyLegacyIosHeaders(protocol: String) {
+        val teacher = Client(server.port, "Teacher", "school-test", true, null, true, protocol).also { clients += it }
+        assertTrue("Own UserState must precede ServerSync", teacher.session in teacher.announcedSessions)
+        assertTrue("Root ChannelState must precede ServerSync", 0 in teacher.announcedChannels)
+        assertEquals("Клас", teacher.channel)
+        assertEquals(16, teacher.crypto!!.bytes(1)!!.size)
+        assertEquals(1L, teacher.codec!!.number(4))
+        assertEquals(1, count())
+        teacher.send(3, Proto.build { number(1, 98765) })
+        assertEquals(98765L, Proto.parse(teacher.until(3)).number(1))
+        val voice = opusVoice(1)
+        teacher.send(1, voice.copyOf().apply { this[0] = (this[0].toInt() or 31).toByte() })
+        assertArrayEquals(forwarded(teacher, voice), teacher.until(1))
+        val rejected = Client(server.port, "Wrong", "wrong", true, null, true, protocol).also { clients += it }
+        assertEquals(4L, rejected.rejection?.number(1))
+    }
+
     @Test fun authenticationCapacityChannelAndKeepAlive() {
         assertEquals(0, count())
         assertEquals(4L, client("Wrong", "wrong").rejection?.number(1))
@@ -192,7 +212,10 @@ class ServerIntegrationTest {
     private fun opusVoice(sequence: Int) = byteArrayOf(0x80.toByte()) + MumbleVarInt.encode(sequence.toLong()) + byteArrayOf(3, 0xf8.toByte(), 0xff.toByte(), 0xfe.toByte())
     private fun forwarded(client: Client, body: ByteArray) = body.copyOfRange(0, 1) + MumbleVarInt.encode(client.session.toLong()) + body.copyOfRange(1, body.size)
 
-    private class Client(port: Int, name: String, password: String, opus: Boolean, celt: Int?) : Closeable {
+    private class Client(
+        port: Int, name: String, password: String, opus: Boolean, celt: Int?,
+        private val legacyHeaders: Boolean = false, protocol: String? = null,
+    ) : Closeable {
         // Only test clients accept the test server's self-signed certificate automatically.
         val socket = SSLContext.getInstance("TLS").apply {
             init(null, arrayOf(object : X509TrustManager {
@@ -208,7 +231,10 @@ class ServerIntegrationTest {
         var crypto: Proto? = null
         var codec: Proto? = null
         var channel: String? = null
+        val announcedSessions = mutableSetOf<Int>()
+        val announcedChannels = mutableSetOf<Int>()
         init {
+            protocol?.let { socket.enabledProtocols = arrayOf(it) }
             socket.soTimeout = 3000; socket.tcpNoDelay = true; socket.startHandshake()
             input = DataInputStream(socket.inputStream); output = DataOutputStream(socket.outputStream)
             send(0, Proto.build { number(1, 0x010203); text(2, "Kotlin protocol test") })
@@ -220,7 +246,8 @@ class ServerIntegrationTest {
                     when (kind) {
                         4 -> { rejection = Proto.parse(body); done = true }
                         5 -> { session = Proto.parse(body).number(1)!!.toInt(); done = true }
-                        7 -> channel = Proto.parse(body).text(3)
+                        7 -> Proto.parse(body).let { channel = it.text(3); announcedChannels += it.number(1)!!.toInt() }
+                        9 -> announcedSessions += Proto.parse(body).number(1)!!.toInt()
                         15 -> crypto = Proto.parse(body)
                         21 -> codec = Proto.parse(body)
                     }
@@ -232,7 +259,15 @@ class ServerIntegrationTest {
         fun send(type: Int, body: ByteArray) { output.writeShort(type); output.writeInt(body.size); output.write(body); output.flush() }
         fun rawHeader(type: Int, size: Int) { output.writeShort(type); output.writeInt(size); output.flush() }
         private fun read(): Pair<Int, ByteArray> {
-            val type = input.readUnsignedShort(); val size = input.readInt(); check(size in 0..65536)
+            val header = if (legacyHeaders) {
+                // MumbleKit's _dataReady reads the six-byte header once and drops short reads.
+                val bytes = ByteArray(6)
+                assertEquals("Legacy iOS client needs a complete header in one TLS read", 6, input.read(bytes))
+                ByteBuffer.wrap(bytes)
+            } else null
+            val type = header?.short?.toInt()?.and(0xffff) ?: input.readUnsignedShort()
+            val size = header?.int ?: input.readInt()
+            check(size in 0..65536)
             val body = ByteArray(size); input.readFully(body); return type to body
         }
         fun until(expected: Int): ByteArray {
